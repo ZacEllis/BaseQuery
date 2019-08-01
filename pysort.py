@@ -13,7 +13,7 @@ Date:            2/16/2019
 Description:     Takes in one file at a time as command line input. processes each line in the file and places the
                  information into the correct subdirectory of the data folder.
 Usage:           python3 pysort.py file.txt
-Version:	     1.6.0
+Version:	     1.6.1
 Python Version:  3.7.1
 """
 
@@ -505,7 +505,7 @@ if __name__ == '__main__':
     print("\n" + out_total_time + "\n" + out_total_lines + "\n" + out_written_lines)
 
     # Log times
-    with open(os.path.join(bq_dir, "/Logs/ActivityLogs.log"), 'a') as log:
+    with open(os.path.join(bq_dir, "Logs/ActivityLogs.log"), 'a') as log:
         log.write(out_total_time + "\n" + out_total_lines + "\n" + out_written_lines + "\n")
 
 
