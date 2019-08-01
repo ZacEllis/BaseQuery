@@ -1,4 +1,6 @@
+#!/usr/bin/env python3
 from __future__ import print_function
+import argparse
 import os
 import sys
 import time
@@ -11,11 +13,9 @@ Date:            2/16/2019
 Description:     Takes in one file at a time as command line input. processes each line in the file and places the
                  information into the correct subdirectory of the data folder.
 Usage:           python3 pysort.py file.txt
-Version:	     1.5.0
+Version:	     1.6.0
 Python Version:  3.7.1
 """
-
-args = sys.argv
 
 # Need TODO
 # Option to choose certain dirs to check for @gmail.com
@@ -60,9 +60,12 @@ args = sys.argv
 # added extra log info
 # add check to see if the PutYourDatabasesHere folder has any new files before decompressing. Saving time
 
+RED = '\033[0;31m'
+GREEN = '\033[0;32m'
+YELLOW = '\033[1;33m'
+NC = '\033[0m'  # No Color
 
-
-def check_duplicate(full_file_path, line):
+def check_duplicate(full_file_path:str, line:str) -> bool:
     """
     This function takes in a path to the file and the specific line we want to check for duplicates with. First the file
     is checked to make sure it isn't empty, then the file is opened as a binary so we can store the lines as a mmap obj.
@@ -82,7 +85,7 @@ def check_duplicate(full_file_path, line):
     return True  # Write to the file
 
 
-def place_data(line, path):
+def place_data(line:str, path:str) -> int:
     """
     This function takes in the line of the current file and the root path to the BaseQuery directory. Checks the format
     of the file to make sure each line is in the email:password format. Then determines the depth of the correct characters
@@ -90,7 +93,7 @@ def place_data(line, path):
     the username:password combo is correctly placed into a easy to query file. If a invalid character is determined in the
     first 4 chars then it will be put in a '0UTLIERS.txt' file.
     :param line: email:password
-    :param path: full path to file
+    :param path: full path to BaseQuery directory
     :return: Either a 1 or a 0 depending on if a line has been written or not
     """
     #  Check if the line starts with a :
@@ -446,50 +449,64 @@ def place_data(line, path):
     return 0
 
 
+def handle_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-i","--input_dir", default="PutYourDataBasesHere", help="Specify alternate input location")
+    parser.add_argument("file", help="File to index")
+    args = parser.parse_args()
+    
+    if os.path.isdir(args.input_dir) == False: # Ensure input directory exists
+        print(RED + "[!]" + NC + " Directory '" + args.input_dir + "' not found")
+        exit(-1)
+
+    file_path = os.path.join(args.input_dir, args.file)
+    if os.path.exists(file_path) == False: # Ensure input file exists
+        print(RED + "[!]" + NC + " File '" + args.file + "' not found in import location '" + args.input_dir + "'")
+        exit(-1)
+    
+    unhandled_extensions = ["sql","csv","json","xlsx"]
+    if "." in args.file:
+        if args.file.split(".")[-1] in unhandled_extensions:
+            print(YELLOW + "[!]" + NC + " File type '" + args.file.split(".")[-1] + "' currently unsupported (" + args.file + ")")
+            exit(-1)
+
+    return args
+
+
 if __name__ == '__main__':
 
-    #  There is currently not support for these file extension; This skips them to speed up the import
-    if args[1].endswith(".sql") or args[1].endswith(".csv") or args[1].endswith(".json") or args[1].endswith(".sql") or args[1].endswith(".xlsx"):
-        exit()
+    args = handle_args()
+    file_path = os.path.join(args.input_dir, args.file)
+    bq_dir = os.getcwd()
 
     start_time = time.time()
     total_lines = 0  # The amount of lines that are not white-space
     written_lines = 0  # The amount of lines written
 
-    RED = '\033[0;31m'
-    GREEN = '\033[0;32m'
-    YELLOW = '\033[1;33m'
-    NC = '\033[0m'  # No Color
-    path = os.getcwd()
+    print(GREEN + "[+]" + NC + " Opening file " + GREEN + args.file + NC)
+    with open(file_path, 'r') as fp:
+        try:
+            for line in fp:
+                if total_lines % 10000 == 0 and total_lines != 0:
+                    print(GREEN + "[+]" + NC + " Processing line number: " + str(total_lines) + "\nLine: " + line)
+                if line.strip() != "":
+                    written_lines += place_data(line.strip(), bq_dir)
+                    total_lines += 1
+        except Exception as e:
+            print(RED + "Exception: " + str(e) + NC)
+    stop_time = time.time()
 
-    #  Check to see if the arguments are correct
-    if len(args) == 2 and args[1] != "":
-        print(GREEN + "[+]" + NC + " Opening file " + GREEN + args[1] + NC)
-        #  Directory guaranteed to exist from previous check in Import.sh
-        with open(path + "/PutYourDataBasesHere/" + args[1], 'r') as fp:
-            try:
-                for line in fp:
-                    if total_lines % 10000 == 0 and total_lines != 0:
-                        print(GREEN + "[+]" + NC + " Processing line number: " + str(total_lines) + "\nLine: " + line)
-                    if line.strip() != "":
-                        written_lines += place_data(line.strip(), path)
-                        total_lines += 1
-            except Exception as e:
-                print(RED + "Exception: " + str(e) + NC)
-        stop_time = time.time()
-        #  Output to Stdout
-        print()
-        print(GREEN + "[+]" + NC + " Total time: " + str(("%.2f" % (stop_time - start_time)) + " seconds"))
-        print(GREEN + "[+]" + NC + " Total lines: " + str(("%.2f" % total_lines)))
-        print(GREEN + "[+]" + NC + " Written lines: " + str(("%.2f" % written_lines)))
+    # Useful metrics
+    out_total_time    = GREEN + "[+]" + NC + " Total time: "    + str(("%.2f" % (stop_time - start_time)) + " seconds")
+    out_total_lines   = GREEN + "[+]" + NC + " Total lines: "   + str(("%.2f" % total_lines))
+    out_written_lines = GREEN + "[+]" + NC + " Written lines: " + str(("%.2f" % written_lines))
+    
+    #  Output to Stdout
+    print("\n" + out_total_time + "\n" + out_total_lines + "\n" + out_written_lines)
 
-        # Log times
-        with open(path + "/Logs/ActivityLogs.log", 'a') as log:
-            log.write("[+] Total time: " + str(("%.2f" % (stop_time - start_time)) + " seconds") + "\n")
-            log.write("[+] Total lines: " + str(("%.2f" % total_lines)) + "\n")
-            log.write("[+] Written lines: " + str(("%.2f" % written_lines)) + "\n")
-    else:
-        print(YELLOW + "[!]" + NC + " Invalid arguments provided")
+    # Log times
+    with open(os.path.join(bq_dir, "/Logs/ActivityLogs.log"), 'a') as log:
+        log.write(out_total_time + "\n" + out_total_lines + "\n" + out_written_lines + "\n")
 
 
 
